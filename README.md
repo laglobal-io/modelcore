@@ -9,7 +9,7 @@ Next.js (App Router) + Supabase (Postgres, Auth, RLS) + Stripe Connect, deployed
 
 | Step | Where | What happens |
 |---|---|---|
-| Partner claims a code | `/partners/dashboard` → `become_partner()` | Code like `levay`, link `modelcore.io/r/levay` |
+| Partner claims a code | `/partners/dashboard` → `become_partner()` | Named link `modelcore.io/r/levay`, plus an auto-generated code-only link like `modelcore.io/r/n3knncb`. Both credit the same partner |
 | Visitor clicks link | `src/app/r/[code]/route.ts` | Click logged (hashed IP, UTM, country), first-touch cookie set for 90 days, redirect to `?to=` path |
 | `?ref=code` on any page | `src/middleware.ts` | Routed through `/r/code`, same tracking |
 | Visitor onboards | `src/app/api/onboarding/route.ts` | Magic link sent; intake answers and referral cookie ride along as signup metadata |
@@ -30,6 +30,62 @@ Next.js (App Router) + Supabase (Postgres, Auth, RLS) + Stripe Connect, deployed
 
 ### Tables
 `partners`, `referral_clicks`, `referral_attributions`, `referral_commissions`, `partner_payouts`, `app_settings` (plus core: `profiles`, `listings`, `data_requests`, `nda_agreements`, `deals`). All have RLS.
+
+## Sample room
+
+Buyers request a sample after both sides sign the NDA. Sellers either upload files to a private
+Supabase Storage bucket (`samples`) or paste an https link to their own storage. Buyers never get a
+storage URL: they open `/api/samples/:id/download`, the database authorizes and logs the access,
+and the route redirects to a signed URL that lives 5 minutes.
+
+- Schema and rules: `supabase/migrations/20261108000003_samples.sql` (state functions, RLS, access log)
+- Limits: 5 GB per file, 20 GB and 25 files per sample, 5 downloads per file, access for 7, 14 or 30 days (`src/lib/samples/core.ts`)
+- Uploads go browser to Storage with signed upload URLs (`src/lib/samples/client.ts`), so file bytes never pass through Vercel
+- `GET /api/cron/sample-expiry` (hourly) ends expired samples and deletes their files, plus uploads abandoned for a day
+- Revoke, "not a fit" and "need another sample" delete stored files immediately
+- Buyers confirm deletion when a sample ends without a funded deal; sellers see that confirmation and the full access log
+- ModelCore stores samples only. Full datasets still go seller to buyer.
+
+Supabase plan note: the free plan caps uploads at 50 MB per file. Raise the global upload limit on a
+paid plan to match `file_size_limit` on the bucket. Files over ~6 MB upload more reliably with
+resumable (TUS) uploads; swap `uploadToSignedUrl` for a TUS client when large samples are common.
+
+| Route | Who | What |
+|---|---|---|
+| `POST /api/samples` | buyer | Request a sample (`listingId`, `request`, `acceptTerms`) |
+| `POST /api/samples/:id/files` | seller | Start an upload, returns a signed upload URL |
+| `POST /api/samples/:id/files/:fileId/complete` | seller | Verify the object and record its size |
+| `DELETE /api/samples/:id/files/:fileId` | seller | Remove a file before sharing |
+| `POST /api/samples/:id/share` | seller | Share uploads or a link, set expiry |
+| `POST /api/samples/:id/decline` | seller | Decline with a reason |
+| `POST /api/samples/:id/revoke` | seller | End access now and delete files |
+| `GET /api/samples/:id/download?file=` | buyer | Logged, short-lived download or link redirect |
+| `POST /api/samples/:id/review` | buyer | Ratings, issues, notes, verdict |
+| `POST /api/samples/:id/confirm-deletion` | buyer | Certify the sample was deleted |
+
+## Data enrichment
+
+Buyers can take delivery as-is or with enrichment (de-identification, transcription and translation,
+labeling, dedup and quality scoring, schema normalization, metadata and embeddings). Orders live in
+`enrichment_orders` (`supabase/migrations/20261108000004_enrichment.sql`). Price is cost plus a markup
+that is never below 12% (default 15%), enforced by a check constraint and a trigger that reads
+`app_settings.enrichment_min_markup_bps`. Buyers read `enrichment_orders_buyer`, which shows the
+quoted price only, never cost or markup. Pricing helper: `src/lib/enrichment/pricing.ts`.
+
+## Clickable prototype
+
+`prototype/index.html` is the full clickable prototype (single file, no build). Open it in a browser,
+or it's served at `/prototype/` if you copy it into `public/`. Use the "View as" switcher at the bottom
+right to see the site as a visitor, data owner, buyer or partner. Its data is example data only.
+
+## Deploy
+
+1. Create a GitHub repo and push this folder (`git push -u origin main`).
+2. In Supabase: create a project, run the migrations in `supabase/migrations` in order, and set the
+   global upload limit to match the `samples` bucket if you're on a paid plan.
+3. In Vercel: import the repo, add the variables from `.env.example`, and deploy. Crons in
+   `vercel.json` run partner payouts (1st and 15th) and sample expiry (hourly).
+4. In Stripe: enable Connect, add the webhook endpoint `/api/webhooks/stripe`.
 
 ## Setup
 

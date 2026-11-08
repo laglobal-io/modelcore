@@ -3,13 +3,13 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { formatUsd, suggestCode } from "@/lib/referrals/core";
-import { BecomePartnerForm, ConnectPayoutsButton, CopyLink } from "./client";
+import { BecomePartnerForm, ConnectPayoutsButton, ReferralLinks } from "./client";
 
 export const metadata: Metadata = { title: "Partner dashboard", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 type Dashboard = {
-  partner: { code: string; type: string; status: string; share_bps: number; platform_fee_bps: number; payouts_enabled: boolean; attribution_window_months: number; min_payout_cents: number };
+  partner: { code: string; short_code: string; type: string; status: string; share_bps: number; platform_fee_bps: number; payouts_enabled: boolean; attribution_window_months: number; min_payout_cents: number };
   stats: { clicks_30d: number; clicks_total: number; visitors_total: number; signups: number; active_referrals: number; deals_closed: number; pending_cents: number; approved_cents: number; paid_cents: number };
   clicks_by_day: { day: string; clicks: number }[];
   pipeline: { attribution_id: string; company: string; role: string; source: string; attributed_at: string; expires_at: string; stage: string; listings_count: number; deals_closed: number; gross_cents: number; commission_cents: number }[];
@@ -42,7 +42,7 @@ export default async function PartnerDashboard({ searchParams }: { searchParams:
         <section className="pagehead"><div className="wrap">
           <span className="eyebrow">Partner program</span>
           <h1 className="d d-l">Bring deals.<br /><span className="acc">Keep 25%.</span></h1>
-          <p className="lede">Refer data owners or buyers. When a referred company closes a deal, you earn 25% of ModelCore&apos;s 10% fee, approx 2.5% of the deal value, for 24 months from their first visit.</p>
+          <p className="lede">Refer data owners or buyers. When a referred company closes a deal, you earn 25% of ModelCore&apos;s 10% fee, 2.5% of the deal value, for 24 months from their first visit. No cap.</p>
         </div></section>
         <section className="section"><div className="wrap" style={{ maxWidth: 640, marginLeft: 0 }}>
           <div className="panel"><h2>Claim your referral code</h2><BecomePartnerForm suggested={suggestCode(me?.full_name || user.email?.split("@")[0] || "partner")} /></div>
@@ -52,7 +52,8 @@ export default async function PartnerDashboard({ searchParams }: { searchParams:
   }
 
   const d = data as Dashboard;
-  const link = `${env.siteUrl().replace(/^https?:\/\//, "")}/r/${d.partner.code}`;
+  const host = env.siteUrl().replace(/^https?:\/\//, "");
+  const named = `${host}/r/${d.partner.code}`, coded = `${host}/r/${d.partner.short_code}`;
   const effective = ((d.partner.platform_fee_bps * d.partner.share_bps) / 1e8) * 100;
 
   // 30-day click series with empty days filled
@@ -77,7 +78,7 @@ export default async function PartnerDashboard({ searchParams }: { searchParams:
         <span className="eyebrow">Partner dashboard</span>
         <h1 className="d d-m">{d.partner.code}</h1>
         <p className="muted" style={{ marginTop: 12 }}>
-          You earn {d.partner.share_bps / 100}% of ModelCore&apos;s {d.partner.platform_fee_bps / 100}% fee (approx {effective.toFixed(1)}% of deal value) for {d.partner.attribution_window_months} months from each referral&apos;s first visit.
+          You earn {d.partner.share_bps / 100}% of ModelCore&apos;s {d.partner.platform_fee_bps / 100}% fee ({effective.toFixed(1)}% of deal value, no cap) for {d.partner.attribution_window_months} months from each referral&apos;s first visit.
         </p>
       </div></section>
 
@@ -109,7 +110,7 @@ export default async function PartnerDashboard({ searchParams }: { searchParams:
           <div className="stack">
             <div className="panel">
               <h2>Your referral link</h2>
-              <CopyLink text={link} />
+              <ReferralLinks named={named} coded={coded} />
               <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Add <code>?to=/join?role=seller</code> to send data owners straight to onboarding. Colleagues who join from the same company domain are credited to you too.</p>
             </div>
             <div className="panel">

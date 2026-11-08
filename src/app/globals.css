@@ -123,3 +123,8 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 .role b { font-family: var(--f-display), sans-serif; font-weight: 900; font-stretch: 118%; text-transform: uppercase; font-size: 20px; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.seg { display: inline-flex; border: 1px solid var(--line); justify-self: start; }
+.seg button { background: none; border: 0; padding: 8px 14px; font-family: var(--f-mono), monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-checked="true"] { background: var(--fg); color: var(--bg); }

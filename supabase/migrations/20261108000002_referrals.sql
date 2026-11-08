@@ -52,7 +52,8 @@ create type public.payout_status as enum ('processing', 'paid', 'failed');
 create table public.partners (
   id                uuid primary key default gen_random_uuid(),
   profile_id        uuid not null unique references public.profiles (id) on delete cascade,
-  code              citext not null unique check (code ~ '^[a-z0-9][a-z0-9-]{2,31}$'),
+  code              citext not null unique check (code ~ '^[a-z0-9][a-z0-9-]{2,31}$'),   -- named link: /r/levay
+  short_code        citext unique check (short_code ~ '^[a-hj-km-np-z2-9]{7}$'),       -- code-only link: /r/n3knncb
   type              public.partner_type not null default 'general',
   status            public.partner_status not null default 'active',
   share_bps         integer check (share_bps between 0 and 10000),  -- null = use default setting
@@ -60,6 +61,29 @@ create table public.partners (
   payouts_enabled   boolean not null default false,
   created_at        timestamptz not null default now()
 );
+
+-- Every partner gets a neutral 7-character code for unbranded links. Both links credit the same partner.
+create or replace function public.gen_partner_short_code() returns trigger
+language plpgsql as $$
+declare
+  a text := 'abcdefghjkmnpqrstuvwxyz23456789';
+  c text;
+begin
+  if new.short_code is null then
+    loop
+      c := '';
+      for i in 1..7 loop
+        c := c || substr(a, 1 + floor(random() * length(a))::int, 1);
+      end loop;
+      exit when not exists (select 1 from public.partners where short_code = c or code = c);
+    end loop;
+    new.short_code := c;
+  end if;
+  return new;
+end $$;
+
+create trigger partners_short_code before insert on public.partners
+  for each row execute function public.gen_partner_short_code();
 
 -- ---------------------------------------------------------------------------
 -- Clicks (raw tracking; partners only ever see aggregates)
@@ -198,7 +222,7 @@ begin
 
   if nullif(trim(coalesce(p_code, '')), '') is not null then
     select * into v_partner from public.partners
-      where code = lower(trim(p_code))::citext and status = 'active';
+      where (code = lower(trim(p_code))::citext or short_code = lower(trim(p_code))::citext) and status = 'active';
 
     if found and v_partner.profile_id <> p_profile_id then
       -- No credit for referring your own company.
@@ -432,6 +456,9 @@ begin
   if lower(trim(p_code)) !~ '^[a-z0-9][a-z0-9-]{2,31}$' then
     raise exception 'Codes are 3-32 characters: letters, numbers and hyphens' using errcode = '22023';
   end if;
+  if exists (select 1 from public.partners where short_code = lower(trim(p_code))::citext) then
+    raise exception 'That code is taken' using errcode = '23505';
+  end if;
   if lower(trim(p_code)) = any (array['admin','modelcore','api','www','support','help','partners','r']) then
     raise exception 'That code is reserved' using errcode = '22023';
   end if;
@@ -511,7 +538,7 @@ begin
 
   return jsonb_build_object(
     'partner', jsonb_build_object(
-      'id', v_partner.id, 'code', v_partner.code, 'type', v_partner.type, 'status', v_partner.status,
+      'id', v_partner.id, 'code', v_partner.code, 'short_code', v_partner.short_code, 'type', v_partner.type, 'status', v_partner.status,
       'share_bps', v_share, 'platform_fee_bps', public.setting_int('platform_fee_bps'),
       'payouts_enabled', v_partner.payouts_enabled,
       'attribution_window_months', public.setting_int('attribution_window_months'),

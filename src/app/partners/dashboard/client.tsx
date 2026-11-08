@@ -31,6 +31,25 @@ export function CopyLink({ text }: { text: string }) {
   );
 }
 
+export function ReferralLinks({ named, coded }: { named: string; coded: string }) {
+  const [style, setStyle] = useState<"named" | "code">("named");
+  return (
+    <div className="form">
+      <div className="seg" role="radiogroup" aria-label="Link style">
+        <button type="button" role="radio" aria-checked={style === "named"} onClick={() => setStyle("named")}>Named</button>
+        <button type="button" role="radio" aria-checked={style === "code"} onClick={() => setStyle("code")}>Code only</button>
+      </div>
+      <CopyLink text={style === "named" ? named : coded} />
+      <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+        {style === "named"
+          ? "Shows your name in the link. Good when people know you."
+          : "A neutral code with no name in it. Good for cold outreach, newsletters or when you'd rather stay in the background."}{" "}
+        Both links credit you the same way.
+      </p>
+    </div>
+  );
+}
+
 export function BecomePartnerForm({ suggested }: { suggested: string }) {
   const router = useRouter();
   const [code, setCode] = useState(suggested);

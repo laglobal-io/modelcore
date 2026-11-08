@@ -44,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   const { data: partner } = await db
     .from("partners")
     .select("id, code")
-    .eq("code", code)
+    .or(`code.eq.${code},short_code.eq.${code}`) // named link or code-only link
     .eq("status", "active")
     .maybeSingle();
   if (!partner) return res;

@@ -265,4 +265,17 @@ begin
 end $$;
 reset role;
 
+
+-- 15. Code-only links -------------------------------------------------------
+do $$
+declare sc text := (select short_code from public.partners where code = 'vcfund');
+begin
+  assert sc ~ '^[a-hj-km-np-z2-9]{7}$', 'short code generated: ' || coalesce(sc,'null');
+  assert (select count(distinct short_code) from public.partners) = (select count(*) from public.partners), 'short codes unique';
+end $$;
+select pg_temp.signup('quinn', 'quinn@quietco.io', jsonb_build_object('role','seller','company','Quiet Co','ref_code',(select upper(short_code::text) from public.partners where code = 'vcfund')));
+do $$ begin
+  assert (select p.code from public.referral_attributions a join public.partners p on p.id = a.partner_id where a.profile_id = pg_temp.uid('quinn')) = 'vcfund', 'short code attributes to the same partner';
+end $$;
+
 select 'ALL REFERRAL TESTS PASSED' as result;
